@@ -4,30 +4,33 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintStream;
-import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.ArrayList;
 
-class SimpleChatServer {
+class ClientGUI {
     private Frame frame;
     private Button sendBut;
     private Dialog dialog;
     private TextArea textArea;
     private TextField textField;
+    private MenuBar menuBar;
+    private Menu menu;
+    private MenuItem login;
+    private MenuItem logout;
+    private MenuItem close;
 
-    private ArrayList<Socket> socketList;
+    private BufferedReader in;
+    private PrintStream out;
 
-    private SimpleChatServer() {
+    private ClientGUI() {
         initGUI();
         initNET();
     }
     public static void main(String[] args) {
-        new SimpleChatServer();
+        new ClientGUI();
     }
-    //GUI初始化
     private void initGUI() {
         //建立并初始化框架和组件
-        frame = new Frame("服务端");
+        frame = new Frame("聊天室");
         frame.setLayout(new FlowLayout());
         frame.setBounds(500,300,800,600);
         textArea = new TextArea(21,70);
@@ -36,11 +39,20 @@ class SimpleChatServer {
         textField = new TextField(65);
         textField.setFont(new Font("黑体",Font.PLAIN,18));
         sendBut = new Button("发送");
+        menuBar = new MenuBar();
+        menu = new Menu("菜单");
+        login = new MenuItem("登陆");
+        logout = new MenuItem("登出");
+        close = new MenuItem("关闭");
 
         //将组件添加至框架
         frame.add(textArea);
         frame.add(textField);
         frame.add(sendBut);
+        menuBar.add(menu);
+        menu.add(login);
+        menu.add(logout);
+        menu.add(close);
 
         //开启事件监听
         frameEvent();
@@ -71,16 +83,33 @@ class SimpleChatServer {
             @Override
             public void keyPressed(KeyEvent e) {
                 if (e.getKeyCode()==KeyEvent.VK_ENTER)
-                    sendMsg("");
+                    sendMsg();
             }
         });
         //Action监听：点击发送按钮发送消息
         sendBut.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                sendMsg("");
+                sendMsg();
             }
         });
+
+        //Action监听：菜单项对应的处理方式
+        ActionListener al = new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                String s = e.getActionCommand();
+                if (s.equals("登陆")) {}
+                if (s.equals("登出")) {}
+                if (s.equals("关闭")) {
+                    System.exit(0);
+                }
+            }
+        };
+
+        login.addActionListener(al);
+        logout.addActionListener(al);
+        close.addActionListener(al);
     }
     //弹出对话框方法(可以放init中初始化，这里会慢点)
     private void showDialog(String msg) {
@@ -127,62 +156,37 @@ class SimpleChatServer {
     //网络连接初始化
     private void initNET() {
         try {
-            //新建服务端ServerSocket服务
-            ServerSocket ss = new ServerSocket(10000);
-            //新建存放socket的集合容器
-            socketList = new ArrayList<>();
-            //接收获取客户端的Socket
-            while (true) {
-                Socket userSocket = ss.accept();
-                socketList.add(userSocket);
-                //开启该用户读写线程
-                new Thread(new UserThread(userSocket)).start();
-            }
+            //新建客户端Socket服务
+            Socket socket = new Socket("127.0.0.1",10000);
+            //获取网络输入缓冲区
+            in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            //获取网络输出缓冲区
+            out = new PrintStream(socket.getOutputStream(),true);
+            //开启读取网络数据线程
+            new Thread(new readThread()).start();
+            System.out.println("网络初始化成功");
         } catch (IOException e) {
             System.out.println("网络初始化失败"+e);
             e.printStackTrace();
         }
     }
-    //发送系统广播消息
-    private void sendMsg(String msg) {
-        try {
-            for (Socket socket : socketList) {
-                //如果消息为空，那么输入栏内容即是消息
-                if (msg.equals("")) {
-                    msg = textField.getText();
-                    textField.setText("");
-                    //如果输入栏没有内容，弹出提示框
-                    if(msg.equals("")) {
-                        showDialog("发送的消息不能为空");
-                        return ;
-                    }
-                }
-                //获取网络输出缓冲区
-                PrintStream out = new PrintStream(socket.getOutputStream(),true);
-                out.println(msg);
-                textArea.append(msg+"\r\n");
-            }
-        } catch (IOException e) {
-            System.out.println("发送广播消息异常"+e);
-            e.printStackTrace();
+    //发送网络数据方法
+    private void sendMsg() {
+        String msg = textField.getText();
+        if (msg.equals(""))
+            showDialog("发送消息不能为空");
+        else {
+            out.println(msg);
+            textField.setText("");
         }
     }
     //读取网络数据线程内部类
-    class UserThread implements Runnable {
-        private Socket socket;
-        UserThread(Socket UserSocket) {
-            socket = UserSocket;
-        }
+    class readThread implements Runnable {
         public void run() {
             try {
-                //获取用户IP
-                String UserIp = socket.getLocalAddress().getHostAddress();
-                sendMsg("欢迎 "+UserIp+" 加入聊天室");
-                //获取网络输入缓冲区
-                BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                 String line;
                 while ((line=in.readLine())!=null) {
-                    sendMsg(UserIp+"："+line);
+                    textArea.append(line+"\r\n");
                 }
             } catch (IOException e) {
                 System.out.println("读取网络数据失败"+e);
